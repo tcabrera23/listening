@@ -10,6 +10,14 @@ ENV/
 
 # Streamlit
 .streamlit/
+dist/
+build/
+backup/
+
+# PyInstaller
+*.exe
+*.pkg
+spec/
 
 # Archivos temporales
 *.tmp
