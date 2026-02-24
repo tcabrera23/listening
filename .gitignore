@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Streamlit
+.streamlit/
+
+# Archivos temporales
+*.tmp
+*.temp
+
+# Archivos descargados (caché de videos)
+files/
+*.mp3
+*.m4a
+*.webm
+*.ogg
+*.wav
+*.mp4
+*.mpeg
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment variables (mantener .env.example si existe)
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Test outputs
+test_output/
