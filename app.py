@@ -304,9 +304,51 @@ def _render_blanks_exercise(blanks_data: dict, segment_idx: int):
                 icon = "✅" if ok else "❌"
                 st.write(f"**{i+1}.** {icon} Correcta: **{a}**" + (f" (Tú: {u})" if u and not ok else ""))
 
+def check_api_keys():
+    """Check if API keys are present in environment or .env file."""
+    missing_keys = []
+    if not os.getenv("OPENAI_API_KEY"):
+        missing_keys.append("OPENAI_API_KEY")
+    if not os.getenv("GROQ_API_KEY") and not os.getenv("OPENROUTER_API_KEY"):
+        missing_keys.append("GROQ_API_KEY (o OPENROUTER_API_KEY)")
+    
+    return missing_keys
+
+def save_api_keys(openai_key, groq_key, openrouter_key):
+    """Save API keys to .env file."""
+    env_path = Path(".env")
+    with open(env_path, "w") as f:
+        if openai_key:
+            f.write(f"OPENAI_API_KEY={openai_key}\n")
+            os.environ["OPENAI_API_KEY"] = openai_key
+        if groq_key:
+            f.write(f"GROQ_API_KEY={groq_key}\n")
+            os.environ["GROQ_API_KEY"] = groq_key
+        if openrouter_key:
+            f.write(f"OPENROUTER_API_KEY={openrouter_key}\n")
+            os.environ["OPENROUTER_API_KEY"] = openrouter_key
+    st.success("✅ Claves guardadas correctamente! Recarga la página si es necesario.")
+    st.rerun()
+
 def main():
     init_session_state()
     
+    # Check for API keys before showing main UI
+    missing = check_api_keys()
+    if missing:
+        st.warning("⚠️ Faltan claves de API para funcionar correctamente.")
+        st.info("Por favor, introduce tus claves para comenzar. Se guardarán en un archivo .env local.")
+        
+        with st.form("api_keys_form"):
+            openai_key = st.text_input("OpenAI API Key (sk-...)", type="password")
+            groq_key = st.text_input("Groq API Key (gsk-...)", type="password")
+            openrouter_key = st.text_input("OpenRouter API Key (sk-or-...)", type="password")
+            submitted = st.form_submit_button("Guardar Claves")
+            
+            if submitted:
+                save_api_keys(openai_key, groq_key, openrouter_key)
+        return
+
     # Sidebar con información de caché
     with st.sidebar:
         st.header("⚙️ Configuración")
