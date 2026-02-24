@@ -106,10 +106,12 @@ def render_listening_tab():
             with st.spinner("Descargando y extrayendo audio..."):
                 work_dir = tempfile.mkdtemp()
                 st.session_state.work_dir = work_dir
-                audio_path = get_audio_from_youtube(url, work_dir, use_cache=True)
+                audio_path, error_msg = get_audio_from_youtube(url, work_dir, use_cache=True)
         
         if not audio_path:
             st.error("❌ No se pudo obtener el audio del vídeo.")
+            if error_msg:
+                st.error(f"Detalle del error: {error_msg}")
             st.info("💡 Intenta con otro video de YouTube o verifica que el video sea público.")
             return
         

@@ -58,10 +58,10 @@ def _find_audio_file(out_dir: str) -> str | None:
     return None
 
 
-def _get_audio_native_with_yt_dlp(url: str, out_dir: str) -> str | None:
+def _get_audio_native_with_yt_dlp(url: str, out_dir: str) -> tuple[str | None, str | None]:
     """
     Download audio stream without ffmpeg postprocessing.
-    This works in environments where ffmpeg is not installed.
+    Returns (path, error_message).
     """
     out_path = os.path.join(out_dir, "%(title)s.%(ext)s")
     opts = {
@@ -76,16 +76,17 @@ def _get_audio_native_with_yt_dlp(url: str, out_dir: str) -> str | None:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)
             if not info:
-                return None
-        return _find_audio_file(out_dir)
-    except Exception:
-        return None
+                return None, "No video info returned"
+        path = _find_audio_file(out_dir)
+        return path, None
+    except Exception as e:
+        return None, str(e)
 
 
-def _get_audio_mp3_with_yt_dlp(url: str, out_dir: str) -> str | None:
+def _get_audio_mp3_with_yt_dlp(url: str, out_dir: str) -> tuple[str | None, str | None]:
     """Try to download and extract audio to MP3 using yt-dlp+ffmpeg."""
     if not shutil.which("ffmpeg"):
-        return None
+        return None, "ffmpeg not found in PATH"
     out_path = os.path.join(out_dir, "%(title)s.%(ext)s")
     opts = {
         "format": "bestaudio/best",
@@ -106,34 +107,36 @@ def _get_audio_mp3_with_yt_dlp(url: str, out_dir: str) -> str | None:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)
             if not info:
-                return None
-        return _find_audio_file(out_dir)
-    except Exception:
-        return None
+                return None, "No video info returned"
+        path = _find_audio_file(out_dir)
+        return path, None
+    except Exception as e:
+        return None, str(e)
 
 
-def _get_audio_with_moviepy(video_path: str, out_dir: str) -> str | None:
-    """Extract audio from downloaded video using moviepy. Returns path to audio file or None."""
+def _get_audio_with_moviepy(video_path: str, out_dir: str) -> tuple[str | None, str | None]:
+    """Extract audio from downloaded video using moviepy."""
     try:
         from moviepy.editor import AudioFileClip, VideoFileClip
-    except ImportError:
-        return None
+    except ImportError as e:
+        return None, f"MoviePy import error: {e}"
+        
     out_audio = os.path.join(out_dir, "audio_from_video.mp3")
     try:
         # Prefer VideoFileClip so we support any video file
         with VideoFileClip(video_path) as clip:
             clip.audio.write_audiofile(out_audio, logger=None)
-        return out_audio if os.path.isfile(out_audio) else None
-    except Exception:
+        return (out_audio, None) if os.path.isfile(out_audio) else (None, "MoviePy failed to write audio")
+    except Exception as e:
         try:
             with AudioFileClip(video_path) as clip:
                 clip.write_audiofile(out_audio, logger=None)
-            return out_audio if os.path.isfile(out_audio) else None
-        except Exception:
-            return None
+            return (out_audio, None) if os.path.isfile(out_audio) else (None, "MoviePy fallback failed")
+        except Exception as e2:
+            return None, f"MoviePy error: {e}, Fallback error: {e2}"
 
 
-def _download_video_only(url: str, out_dir: str) -> str | None:
+def _download_video_only(url: str, out_dir: str) -> tuple[str | None, str | None]:
     """Download video as a single file without forcing merge."""
     out_path = os.path.join(out_dir, "%(title)s.%(ext)s")
     opts = {
@@ -148,59 +151,63 @@ def _download_video_only(url: str, out_dir: str) -> str | None:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)
             if not info:
-                return None
+                return None, "No info"
             path = ydl.prepare_filename(info)
             full = os.path.join(out_dir, os.path.basename(path))
-            return full if os.path.isfile(full) else None
-    except Exception:
-        return None
+            return (full, None) if os.path.isfile(full) else (None, "Video file not found after download")
+    except Exception as e:
+        return None, str(e)
 
 
-def get_audio_from_youtube(url: str, work_dir: str | None = None, use_cache: bool = True) -> str | None:
+def get_audio_from_youtube(url: str, work_dir: str | None = None, use_cache: bool = True) -> tuple[str | None, str | None]:
     """
-    Download YouTube video and return path to an audio file (MP3 preferred).
-    
-    Args:
-        url: YouTube video URL
-        work_dir: Optional working directory (defaults to temp)
-        use_cache: If True, check cache first and save downloads to cache
-    
-    Caching:
-        - Files are saved in 'files/' directory with video ID as filename
-        - If cached file exists, returns it immediately without downloading
-        - New downloads are automatically cached for future use
-    
-    Fallback strategy:
-        - First tries native yt-dlp audio download (no ffmpeg required)
-        - Then tries yt-dlp+ffmpeg MP3 extraction when ffmpeg is available
-        - If that fails, downloads video with yt-dlp and uses moviepy to extract audio
-
-    Returns path to the audio file, or None on failure.
+    Download YouTube video and return path to an audio file.
+    Returns (path, error_message).
     """
     # Check cache first
     if use_cache:
-        video_id = _get_video_id_from_url(url)
-        if video_id:
-            cached_audio = _get_cached_audio(video_id)
-            if cached_audio:
-                return cached_audio
+        try:
+            video_id = _get_video_id_from_url(url)
+            if video_id:
+                cached_audio = _get_cached_audio(video_id)
+                if cached_audio:
+                    return cached_audio, None
+        except Exception as e:
+            print(f"Cache check error: {e}")
+            video_id = None
     
     # Not in cache, download
     directory = work_dir or tempfile.mkdtemp()
     Path(directory).mkdir(parents=True, exist_ok=True)
+    
+    errors = []
 
-    path = _get_audio_native_with_yt_dlp(url, directory)
-    if not path:
-        path = _get_audio_mp3_with_yt_dlp(url, directory)
-    if not path:
-        video_path = _download_video_only(url, directory)
-        if video_path:
-            path = _get_audio_with_moviepy(video_path, directory)
-    
-    # Save to cache if successful
-    if path and use_cache and video_id:
-        cached_path = _save_to_cache(path, video_id)
-        if cached_path:
-            return cached_path
-    
-    return path
+    # Strategy 1: Native
+    path, err = _get_audio_native_with_yt_dlp(url, directory)
+    if path:
+        if use_cache and video_id:
+            _save_to_cache(path, video_id)
+        return path, None
+    errors.append(f"Native: {err}")
+
+    # Strategy 2: MP3 (ffmpeg)
+    path, err = _get_audio_mp3_with_yt_dlp(url, directory)
+    if path:
+        if use_cache and video_id:
+            _save_to_cache(path, video_id)
+        return path, None
+    errors.append(f"FFmpeg: {err}")
+
+    # Strategy 3: MoviePy
+    video_path, vid_err = _download_video_only(url, directory)
+    if video_path:
+        path, err = _get_audio_with_moviepy(video_path, directory)
+        if path:
+            if use_cache and video_id:
+                _save_to_cache(path, video_id)
+            return path, None
+        errors.append(f"MoviePy extraction: {err}")
+    else:
+        errors.append(f"Video download: {vid_err}")
+
+    return None, "; ".join(errors)

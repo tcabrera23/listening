@@ -15,10 +15,10 @@ print("\n[TEST 1] Downloading video...")
 from transform_video import get_audio_from_youtube
 
 url = "https://www.youtube.com/watch?v=Iz9HydQZhPo"
-audio_path = get_audio_from_youtube(url, use_cache=True)
+audio_path, error = get_audio_from_youtube(url, use_cache=True)
 
 if not audio_path:
-    print("[FAIL] Could not download audio")
+    print(f"[FAIL] Could not download audio: {error}")
     exit(1)
 
 print(f"[OK] Audio downloaded: {audio_path}")

@@ -21,15 +21,15 @@ print(f"Files in cache before test: {len(cached_files)}")
 
 print("\n[1/3] Downloading and extracting audio...")
 print("  (First run: downloads, Second run: from cache)")
-audio_path = get_audio_from_youtube(TEST_URL, use_cache=True)
+audio_path, error = get_audio_from_youtube(TEST_URL, use_cache=True)
 if not audio_path:
-    print("[FAIL] Could not download/extract audio")
+    print(f"[FAIL] Could not download/extract audio: {error}")
     sys.exit(1)
 print(f"[OK] Audio extracted: {audio_path}")
 
 # Test cache hit
 print("\n[CACHE TEST] Re-requesting same video...")
-audio_path_2 = get_audio_from_youtube(TEST_URL, use_cache=True)
+audio_path_2, _ = get_audio_from_youtube(TEST_URL, use_cache=True)
 if audio_path == audio_path_2:
     print("[OK] Cache hit! Same file returned instantly")
 else:
