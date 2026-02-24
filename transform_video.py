@@ -2,6 +2,7 @@
 Download YouTube video and extract audio for transcription.
 Uses yt-dlp first; falls back to moviepy if extraction fails.
 Implements caching system to avoid re-downloading videos.
+(Updated for better error handling)
 """
 import hashlib
 import os
