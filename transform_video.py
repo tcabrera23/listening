@@ -2,7 +2,7 @@
 Download YouTube video and extract audio for transcription.
 Uses yt-dlp first; falls back to moviepy if extraction fails.
 Implements caching system to avoid re-downloading videos.
-(Updated for better error handling)
+(Updated for better error handling and 403 evasion)
 """
 import hashlib
 import os
@@ -65,13 +65,22 @@ def _get_audio_native_with_yt_dlp(url: str, out_dir: str) -> tuple[str | None, s
     Returns (path, error_message).
     """
     out_path = os.path.join(out_dir, "%(title)s.%(ext)s")
+    # Evasion strategy: Use android/ios clients and avoid ipv6
     opts = {
         "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
         "outtmpl": out_path,
         "noplaylist": True,
-        "retries": 5,
-        "extractor_args": {"youtube": {"player_client": ["default", "android", "web"]}},
+        "retries": 10,
+        "fragment_retries": 10,
+        "extractor_args": {
+            "youtube": {
+                "skip": ["dash", "hls"],
+                "player_client": ["android", "ios", "web_embedded"]
+            }
+        },
         "quiet": True,
+        "nocheckcertificate": True,
+        "source_address": "0.0.0.0", # Force IPv4
     }
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -100,9 +109,16 @@ def _get_audio_mp3_with_yt_dlp(url: str, out_dir: str) -> tuple[str | None, str 
             }
         ],
         "noplaylist": True,
-        "retries": 5,
-        "extractor_args": {"youtube": {"player_client": ["default", "android", "web"]}},
+        "retries": 10,
+        "extractor_args": {
+            "youtube": {
+                "skip": ["dash", "hls"],
+                "player_client": ["android", "ios"]
+            }
+        },
         "quiet": True,
+        "nocheckcertificate": True,
+        "source_address": "0.0.0.0",
     }
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -144,9 +160,15 @@ def _download_video_only(url: str, out_dir: str) -> tuple[str | None, str | None
         "format": "best[ext=mp4]/best",
         "outtmpl": out_path,
         "noplaylist": True,
-        "retries": 5,
-        "extractor_args": {"youtube": {"player_client": ["default", "android", "web"]}},
+        "retries": 10,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "ios"]
+            }
+        },
         "quiet": True,
+        "nocheckcertificate": True,
+        "source_address": "0.0.0.0",
     }
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -183,7 +205,7 @@ def get_audio_from_youtube(url: str, work_dir: str | None = None, use_cache: boo
     
     errors = []
 
-    # Strategy 1: Native
+    # Strategy 1: Native (Android/iOS client)
     path, err = _get_audio_native_with_yt_dlp(url, directory)
     if path:
         if use_cache and video_id:
@@ -191,7 +213,7 @@ def get_audio_from_youtube(url: str, work_dir: str | None = None, use_cache: boo
         return path, None
     errors.append(f"Native: {err}")
 
-    # Strategy 2: MP3 (ffmpeg)
+    # Strategy 2: MP3 (ffmpeg + Android/iOS)
     path, err = _get_audio_mp3_with_yt_dlp(url, directory)
     if path:
         if use_cache and video_id:
@@ -199,7 +221,7 @@ def get_audio_from_youtube(url: str, work_dir: str | None = None, use_cache: boo
         return path, None
     errors.append(f"FFmpeg: {err}")
 
-    # Strategy 3: MoviePy
+    # Strategy 3: MoviePy (Video download first)
     video_path, vid_err = _download_video_only(url, directory)
     if video_path:
         path, err = _get_audio_with_moviepy(video_path, directory)
